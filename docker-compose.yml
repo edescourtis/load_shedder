@@ -7,33 +7,29 @@ services:
       - postgres
       - redis
     environment:
-      - PORT=3000
-      - PGHOST=postgres
-      - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=postgres
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - INSTANCE_ID=app_instance_1
+      PORT: 3000
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      INSTANCE_ID: app_instance_1
     ports:
       - '3000:3000'
-    volumes:
-      - .:/usr/src/app
 
   postgres:
-    image: postgres:13-alpine
+    image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
       - '5432:5432'
-    volumes:
-      - pgdata:/var/lib/postgresql/data
 
   redis:
-    image: redis:6-alpine
+    image: redis:7-alpine
     ports:
       - '6379:6379'
 
