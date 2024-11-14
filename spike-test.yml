@@ -1,0 +1,13 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 5        # Normal load
+    - duration: 15
+      arrivalRate: 1000     # Spike to high load
+    - duration: 30
+      arrivalRate: 5        # Return to normal load
+scenarios:
+  - flow:
+      - get:
+          url: "/"
