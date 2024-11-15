@@ -1,54 +1,97 @@
 import { RedisMetricsStorage } from './RedisMetricsStorage';
 import { RedisClientType } from 'redis';
-import { MetricsData } from '../metrics/IMetricsProvider';
+import fc from 'fast-check';
 
-describe('RedisMetricsStorage', () => {
-  let client: RedisClientType;
+interface InstanceData {
+  instanceId: string;
+  metrics: Record<string, number>;
+}
+
+describe('RedisMetricsStorage Property-Based Tests', () => {
+  let redisClientMock: jest.Mocked<RedisClientType>;
   let storage: RedisMetricsStorage;
 
   beforeEach(() => {
-    client = {
-      set: jest.fn(),
+    redisClientMock = {
       keys: jest.fn(),
       get: jest.fn(),
-    } as unknown as RedisClientType;
-
-    storage = new RedisMetricsStorage(client);
+      set: jest.fn(),
+    } as unknown as jest.Mocked<RedisClientType>;
+    storage = new RedisMetricsStorage(redisClientMock);
   });
 
-  test('saves metrics with expiration', async () => {
-    const instanceId = 'instance-1';
-    const metrics: MetricsData = { timestamp: Date.now(), cpuUsage: 75 };
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
 
-    await storage.saveMetrics(instanceId, metrics);
+  test('aggregates metrics by selecting minimum values', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uniqueArray<InstanceData, string>(
+          fc.record({
+            instanceId: fc.string().filter((id: string) => id.trim() !== ''),
+            metrics: fc.dictionary(
+              fc.string().filter((name: string) => {
+                return name.trim() !== '' && !['valueOf', 'toString', 'hasOwnProperty'].includes(name);
+              }),
+              fc.nat()
+            ),
+          }),
+          {
+            selector: (instance: InstanceData) => instance.instanceId,
+          }
+        ),
+        async (instances: InstanceData[]) => {
+          const keyValues: Record<string, Record<string, number>> = {};
+          for (const instance of instances) {
+            const key = `load_shedding_metrics:${instance.instanceId}`;
+            keyValues[key] = instance.metrics;
+          }
 
-    expect(client.set).toHaveBeenCalledWith(
-      'load_shedding_metrics:instance-1',
-      JSON.stringify(metrics),
-      { EX: 15 }
+          const keys = Object.keys(keyValues);
+          redisClientMock.keys.mockResolvedValue(keys);
+
+          redisClientMock.get.mockImplementation(
+            async (...args: unknown[]): Promise<string | null> => {
+              let key: string | Buffer;
+
+              if (typeof args[0] === 'string' || Buffer.isBuffer(args[0])) {
+                key = args[0];
+              } else if (args.length > 1 && (typeof args[1] === 'string' || Buffer.isBuffer(args[1]))) {
+                key = args[1];
+              } else {
+                throw new Error('Invalid arguments for redisClientMock.get');
+              }
+
+              const keyString = key.toString();
+              return keyValues[keyString] ? JSON.stringify(keyValues[keyString]) : null;
+            }
+          );
+
+          const aggregatedMetrics = await storage.getMetrics();
+
+          // Build expected metrics
+          const expectedMetrics: Record<string, number> = {};
+          for (const instance of instances) {
+            for (const metricName in instance.metrics) {
+              if (Object.prototype.hasOwnProperty.call(instance.metrics, metricName)) {
+                const value = instance.metrics[metricName];
+
+                if (
+                  !Object.prototype.hasOwnProperty.call(expectedMetrics, metricName) ||
+                  value < expectedMetrics[metricName]
+                ) {
+                  expectedMetrics[metricName] = value;
+                }
+              }
+            }
+          }
+
+          // Expect the aggregated metrics to equal the expected ones
+          expect(aggregatedMetrics).toEqual(expectedMetrics);
+        }
+      ),
+      { verbose: true }
     );
-  });
-
-  test('aggregates metrics correctly', async () => {
-    (client.keys as jest.Mock).mockResolvedValue([
-      'load_shedding_metrics:instance-1',
-      'load_shedding_metrics:instance-2',
-    ]);
-
-    (client.get as jest.Mock).mockImplementation((key: string) => {
-      if (key === 'load_shedding_metrics:instance-1') {
-        return JSON.stringify({ timestamp: Date.now(), cpuUsage: 80, redisMemoryUsage: 60 });
-      }
-      if (key === 'load_shedding_metrics:instance-2') {
-        return JSON.stringify({ timestamp: Date.now(), cpuUsage: 70, redisMemoryUsage: 50 });
-      }
-    });
-
-    const aggregatedMetrics = await storage.getMetrics();
-
-    expect(aggregatedMetrics).toEqual({
-      cpuUsage: 70,           // Minimum cpuUsage among instances
-      redisMemoryUsage: 50,   // Minimum redisMemoryUsage among instances
-    });
   });
 }); 

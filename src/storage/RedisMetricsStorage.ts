@@ -20,23 +20,32 @@ export class RedisMetricsStorage implements IMetricsStorage {
   }
 
   public async getMetrics(): Promise<AggregatedMetrics> {
-    const keys = await this.client.keys(`${this.metricsKeyPrefix}:*`);
     const aggregated: AggregatedMetrics = {};
-
-    for (const key of keys) {
-      const metricsString = await this.client.get(key);
-      if (metricsString) {
-        const metrics: MetricsData = JSON.parse(metricsString);
-        for (const [metricName, value] of Object.entries(metrics)) {
-          if (metricName !== 'timestamp') {
-            if (!aggregated[metricName] || value < aggregated[metricName]) {
-              aggregated[metricName] = value;
+    try {
+      const keys = await this.client.keys(`${this.metricsKeyPrefix}:*`);
+      for (const key of keys) {
+        try {
+          const metricsString = await this.client.get(key);
+          if (metricsString) {
+            const metrics: MetricsData = JSON.parse(metricsString);
+            for (const [metricName, value] of Object.entries(metrics)) {
+              if (metricName !== 'timestamp') {
+                if (
+                  !Object.prototype.hasOwnProperty.call(aggregated, metricName) ||
+                  value < aggregated[metricName]
+                ) {
+                  aggregated[metricName] = value;
+                }
+              }
             }
           }
+        } catch (error) {
+          console.error(`Error parsing metrics for key ${key}:`, error);
         }
       }
+    } catch (error) {
+      console.error('Error fetching keys from Redis:', error);
     }
-
     return aggregated;
   }
 }

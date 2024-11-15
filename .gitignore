@@ -19,9 +19,6 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Coverage reports
-coverage/
-
 # TypeScript cache
 *.tsbuildinfo
 
@@ -33,10 +30,6 @@ tmp/
 .vscode/
 .idea/
 
-# Optional npm cache directory
-.npm/
-
-# Optional eslint cache
+# ESLint cache
 .eslintcache
-# End Generation Here
 ```

@@ -1,21 +1,18 @@
 import { RedisMetricsProvider } from './RedisMetricsProvider';
+import { mock, MockProxy } from 'jest-mock-extended';
 import { RedisClientType } from 'redis';
 
 describe('RedisMetricsProvider', () => {
-  let client: RedisClientType;
+  let clientMock: MockProxy<RedisClientType>;
   let provider: RedisMetricsProvider;
 
   beforeEach(() => {
-    client = {
-      info: jest.fn(),
-      ping: jest.fn(),
-    } as unknown as RedisClientType;
-
-    provider = new RedisMetricsProvider(client);
+    clientMock = mock<RedisClientType>();
+    provider = new RedisMetricsProvider(clientMock);
   });
 
   test('collects metrics correctly', async () => {
-    (client.info as jest.Mock).mockResolvedValue('used_memory:104857600'); // 100 MB
+    clientMock.info.mockResolvedValue('used_memory:104857600'); // 100 MB
     jest.spyOn(provider as any, 'getCommandLatency').mockResolvedValue(5);
 
     const metrics = await provider.collectMetrics();
@@ -28,7 +25,7 @@ describe('RedisMetricsProvider', () => {
   });
 
   test('parses memory usage from info', async () => {
-    (client.info as jest.Mock).mockResolvedValue('used_memory:52428800'); // 50 MB
+    clientMock.info.mockResolvedValue('used_memory:52428800'); // 50 MB
 
     const memoryUsage = await (provider as any).getMemoryUsage();
 
@@ -36,7 +33,7 @@ describe('RedisMetricsProvider', () => {
   });
 
   test('measures command latency', async () => {
-    (client.ping as jest.Mock).mockResolvedValue('PONG');
+    clientMock.ping.mockResolvedValue('PONG');
 
     const latency = await (provider as any).getCommandLatency();
 
